@@ -28,9 +28,10 @@ An AI-powered platform for understanding U.S. Executive Orders and government ac
 ## Getting Started
 
 ### Prerequisites
-- Python 3.10+
+- Python 3.11 (Required for FAISS compatibility)
 - Node.js 18+
 - OpenAI API key
+- SWIG (Required for building FAISS)
 
 ### Installation
 
@@ -43,7 +44,7 @@ An AI-powered platform for understanding U.S. Executive Orders and government ac
 2. Set up the backend:
    ```bash
    cd backend
-   python -m venv venv
+   python3.11 -m venv venv  # Must use Python 3.11 for FAISS compatibility
    source venv/bin/activate  # On Windows: .\venv\Scripts\activate
    pip install -r requirements.txt
    ```
@@ -57,14 +58,17 @@ An AI-powered platform for understanding U.S. Executive Orders and government ac
 4. Create a .env file in the backend directory:
    ```
    OPENAI_API_KEY=your_api_key_here
+   ENVIRONMENT=development
+   ALLOWED_HOSTS=localhost,127.0.0.1
+   ALLOWED_ORIGINS=http://localhost:3000
+   RATE_LIMIT=20/minute
    ```
 
 ### Running the Application
 
-1. Start the backend server:
+1. Start the backend server (this command will also handle restarting):
    ```bash
-   cd backend
-   uvicorn main:app --reload
+   lsof -i :8000 | grep LISTEN | awk '{print $2}' | xargs kill -9 2>/dev/null; cd backend && source venv/bin/activate && uvicorn main:app --reload
    ```
 
 2. Start the frontend development server:
@@ -74,6 +78,14 @@ An AI-powered platform for understanding U.S. Executive Orders and government ac
    ```
 
 3. Open http://localhost:3000 in your browser
+
+### Environment Variables
+
+- **ENVIRONMENT**: Set to `development` or `production`
+- **ALLOWED_HOSTS**: Comma-separated list of allowed hosts (e.g., `localhost,127.0.0.1`)
+- **ALLOWED_ORIGINS**: Comma-separated list of allowed CORS origins (e.g., `http://localhost:3000`)
+- **RATE_LIMIT**: API rate limit (default: `20/minute`)
+- **OPENAI_API_KEY**: Your OpenAI API key
 
 ## Contributing
 

@@ -40,7 +40,6 @@ export default function Home() {
             ai: msg.role === 'assistant' ? msg.content : null,
           })).filter(msg => msg.human !== null || msg.ai !== null),
         }),
-        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -49,15 +48,12 @@ export default function Home() {
 
       const data = await response.json();
       
-      // Add assistant's response
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.answer,
-          sources: data.sources,
-        },
-      ]);
+      // Add assistant message
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: data.response || data.answer, 
+        sources: data.sources 
+      }]);
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => [

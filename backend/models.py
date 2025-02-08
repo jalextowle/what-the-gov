@@ -1,8 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, create_engine
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-
-Base = declarative_base()
+from database import Base
 
 class ExecutiveOrder(Base):
     __tablename__ = "executive_orders"

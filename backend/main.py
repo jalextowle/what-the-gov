@@ -1,27 +1,48 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.security import HTTPBasic
 from sqlalchemy.orm import Session
+from typing import List, Optional
 from dotenv import load_dotenv
-from models import init_db, ExecutiveOrder
-from database import get_db
-from scraper import EOScraper
+from models import ExecutiveOrder
+from database import get_db, init_db
 from processor import DocumentProcessor
+from scraper import EOScraper
 from pydantic import BaseModel
-from typing import List, Tuple
-import json
 from langchain_openai import OpenAI, OpenAIEmbeddings, ChatOpenAI
 from langchain.vectorstores.faiss import FAISS
 import logging
+import json
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Security settings
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+
+# Add trusted host middleware in production
+if ENVIRONMENT == "production":
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=ALLOWED_HOSTS
+    )
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Frontend URLs
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -29,6 +50,19 @@ app.add_middleware(
 
 engine = init_db()
 openai_api_key = os.getenv("OPENAI_API_KEY")
+
+# Rate limit configuration
+RATE_LIMIT = os.getenv("RATE_LIMIT", "20/minute")  # Default: 20 requests per minute
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    if ENVIRONMENT == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 # Dependency to get database session
 def get_db():
@@ -78,7 +112,8 @@ def generate_eo_summary(db: Session) -> str:
     return "\n".join(summary)
 
 @app.post("/api/ingest")
-async def ingest_documents(db: Session = Depends(get_db)):
+@limiter.limit(RATE_LIMIT)
+async def ingest_documents(request: Request, db: Session = Depends(get_db)):
     if not openai_api_key:
         raise HTTPException(status_code=500, detail="OpenAI API key not configured")
     
@@ -114,100 +149,60 @@ async def ingest_documents(db: Session = Depends(get_db)):
     return {"message": f"Processed {len(total_eos)} new executive orders"}
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest, db: Session = Depends(get_db)):
+@limiter.limit(RATE_LIMIT)
+async def chat(request: Request, chat_request: ChatRequest, db: Session = Depends(get_db)):
     if not openai_api_key:
         raise HTTPException(status_code=500, detail="OpenAI API key not configured")
 
     # Format chat history
     formatted_history = ""
-    if request.chat_history:
-        for msg in request.chat_history:
-            formatted_history += f"Human: {msg['human']}\nAssistant: {msg['ai']}\n\n"
-    
+    if chat_request.chat_history:
+        for msg in chat_request.chat_history:
+            if msg.get('human') and msg.get('ai'):
+                formatted_history += f"Human: {msg['human']}\nAssistant: {msg['ai']}\n\n"
+
     # Generate EO summary
     eo_summary = generate_eo_summary(db)
-    
-    # Get all document chunks and their embeddings
-    chunks = []
-    embeddings_list = []
-    
-    eos = db.query(ExecutiveOrder).all()
-    if not eos:
-        return {
-            "answer": "No Executive Orders have been ingested yet. Please run the /api/ingest endpoint first."
-        }
-    
-    for eo in eos:
-        for chunk in eo.chunks:
-            chunks.append(f"{chunk.content}\n\nSource: Executive Order {eo.order_number}")
-            embeddings_list.append(json.loads(chunk.embedding))
-    
-    if not chunks:
-        return {
-            "answer": "No chunks found in the database. Please run the /api/ingest endpoint to process the documents."
-        }
-    
-    # Create FAISS index
-    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-    vectorstore = FAISS.from_embeddings(
-        text_embeddings=list(zip(chunks, embeddings_list)),
-        embedding=embeddings
-    )
-    
-    # Create LLM
+
+    # Initialize OpenAI
     llm = ChatOpenAI(
-        temperature=0,
-        openai_api_key=openai_api_key,
-        model="gpt-4-turbo-preview"
+        api_key=openai_api_key,
+        model="gpt-4-turbo-preview",
+        temperature=0
+    )
+
+    embeddings = OpenAIEmbeddings(
+        api_key=openai_api_key
+    )
+
+    # Create vector store
+    vectorstore = FAISS.from_texts(
+        [chunk.content for eo in db.query(ExecutiveOrder).all() for chunk in eo.chunks],
+        embeddings
     )
     
     # Get relevant documents
-    docs = vectorstore.similarity_search(request.message, k=3)
+    docs = vectorstore.similarity_search(chat_request.message, k=3)
     context = "\n\n".join(doc.page_content for doc in docs)
     
     # Create prompt
-    prompt = f"""You are an AI assistant helping users understand Executive Orders. You have access to a database of real Executive Orders sourced directly from the Federal Register. Here is a summary of all available Executive Orders:
+    prompt = f"""You are an AI assistant that helps users understand executive orders and government actions. 
+Your responses should be clear, accurate, and based on the provided context from executive orders.
 
+Executive Order Summary:
 {eo_summary}
-
-Important notes:
-1. The above data comes directly from the Federal Register, which is the official source for U.S. Executive Orders
-2. Donald J. Trump became president on January 20, 2025, succeeding Joseph R. Biden
-3. For questions about Executive Orders from other time periods, I will inform you about this limitation
-
-When answering questions:
-1. Use the above summary to answer questions about counts, dates, and titles
-2. Be specific about which administration issued each order
-3. If asked about an executive order not in our database, clearly state that it's not in our current dataset
-4. If relevant, mention when orders were signed relative to key events or other orders
-5. DO NOT include any source citations or references in your response
 
 Current conversation:
 {formatted_history}
 
-Question: {request.message}
+Question: {chat_request.message}
 
 Additional context from the executive orders:
 {context}
 
-Answer: """
+Please provide a clear and informative response based on the executive orders and context provided. If you cannot find relevant information in the context, say so."""
 
-    # Log the prompt for debugging
-    logger.info("Generated prompt:")
-    logger.info(prompt)
+    # Get response from OpenAI
+    response = llm.invoke(prompt)
     
-    # Get response from LLM
-    response = await llm.ainvoke(prompt)
-    
-    async def format_theme(theme: str, description: str) -> str:
-        return f"**{theme}**: {description}"
-
-    async def format_themes(themes: List[Tuple[str, str]]) -> str:
-        formatted_themes = []
-        for theme, desc in themes:
-            formatted_themes.append(f"1. **{theme}**: {desc}")
-        return "\n\n".join(formatted_themes)
-    
-    return {
-        "answer": response.content
-    }
+    return {"response": response.content, "sources": []}
