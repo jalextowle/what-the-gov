@@ -1,67 +1,80 @@
-# PolicyPal
+# What the Gov
 
-PolicyPal is an AI-powered chat interface for understanding U.S. Executive Orders. It allows users to ask questions about Executive Orders and receive answers with specific citations to source documents.
-
-## Project Structure
-
-```
-policypal/
-├── backend/              # FastAPI backend
-│   ├── main.py          # Main FastAPI application
-│   ├── models.py        # SQLAlchemy database models
-│   ├── processor.py     # Document processing and embedding
-│   ├── scraper.py       # Executive Order scraper
-│   └── requirements.txt # Python dependencies
-└── frontend/            # Next.js frontend (to be set up)
-```
-
-## Setup Instructions
-
-### Backend Setup
-
-1. Create a virtual environment and activate it:
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Create a `.env` file in the backend directory:
-```
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-4. Start the backend server:
-```bash
-uvicorn main:app --reload
-```
-
-### Frontend Setup
-
-The frontend setup will use Next.js 14 with:
-- TypeScript for type safety
-- Tailwind CSS for styling
-- shadcn/ui for UI components
-
-(Frontend setup instructions will be added after creating the Next.js project)
+An AI-powered platform for understanding U.S. Executive Orders and government actions. Ask questions in plain English and get insights about executive orders, their impacts, and the changing landscape of presidential power.
 
 ## Features
 
-- Scrapes and stores Executive Orders from whitehouse.gov (2024)
-- Processes documents into chunks for efficient AI context
-- Provides a mobile-responsive chat interface
-- Returns answers with specific citations to source documents
-- Uses OpenAI's GPT models for accurate and contextual responses
+- **Executive Order Analysis**: Track and analyze executive orders in real-time
+- **Natural Language Interface**: Ask questions about executive orders in plain English
+- **Smart Summaries**: Get concise summaries of executive order impacts and themes
+- **Historical Context**: Understand how current orders relate to past presidential actions
+- **Modern UI**: Clean, responsive interface with dark mode support
 
-## Architecture
+## Tech Stack
 
-- Frontend: Next.js, Tailwind CSS, shadcn/ui components
-- Backend: Python FastAPI
-- Database: SQLite
-- AI: OpenAI API, LangChain
-- Hosting: Vercel (frontend), Railway (backend)
+### Backend
+- FastAPI
+- SQLAlchemy
+- Federal Register API
+- OpenAI API
+- LangChain
+
+### Frontend
+- Next.js
+- TypeScript
+- Tailwind CSS
+- React Markdown
+
+## Getting Started
+
+### Prerequisites
+- Python 3.10+
+- Node.js 18+
+- OpenAI API key
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/what-the-gov.git
+   cd what-the-gov
+   ```
+
+2. Set up the backend:
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+3. Set up the frontend:
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+4. Create a .env file in the backend directory:
+   ```
+   OPENAI_API_KEY=your_api_key_here
+   ```
+
+### Running the Application
+
+1. Start the backend server:
+   ```bash
+   cd backend
+   uvicorn main:app --reload
+   ```
+
+2. Start the frontend development server:
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+3. Open http://localhost:3000 in your browser
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.

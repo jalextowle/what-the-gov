@@ -77,7 +77,7 @@ export default function Home() {
       <div className="container mx-auto px-4">
         <header className="py-8 text-center">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
-            PolicyPal
+            What the Gov
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             Ask questions about U.S. Executive Orders
